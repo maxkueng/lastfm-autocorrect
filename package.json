@@ -1,0 +1,28 @@
+{
+  "name": "lastfm-autocorrect",
+  "version": "0.0.1",
+  "description": "An objectMode transform stream that attempts to auto-correct and enhance track metadata using Last.fm's correction API, Levenstein distance and SoundEx.",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/maxkueng/lastfm-autocorrect.git"
+  },
+  "main": "index.js",
+  "keywords": [
+    "lastfm",
+    "last.fm",
+    "autocorrect",
+    "streams2",
+    "playlist"
+  ],
+  "author": "Max Kueng <me@maxkueng.com> (http://maxkueng.com/)",
+  "licenses": [
+    {
+      "type": "MIT",
+      "url": "https://github.com/maxkueng/lastfm-autocorrect/raw/master/LICENSE"
+    }
+  ],
+  "dependencies": {
+    "lastfmapi": "0.0.5",
+    "natural": "~0.1.25"
+  }
+}
