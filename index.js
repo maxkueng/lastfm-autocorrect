@@ -59,8 +59,10 @@ LastfmAutocorrectStream.prototype.getLastfmTrackExtraInfo = function (track, cal
 		if (info.duration) {
 			avgDuration = (!avgDuration) ? +info.duration : Math.floor((avgDuration + +info.duration) / 2);
 			trackInfo.duration = info.duration;
+			trackInfo.durationEstimated = false;
 		} else {
 			trackInfo.duration = avgDuration;
+			trackInfo.durationEstimated = true;
 		}
 
 		if (info.album && info.album.title) {
