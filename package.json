@@ -1,6 +1,6 @@
 {
   "name": "lastfm-autocorrect",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "An objectMode transform stream that attempts to auto-correct and enhance track metadata using Last.fm's correction API, Levenstein distance and SoundEx.",
   "repository": {
     "type": "git",
