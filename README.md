@@ -1,33 +1,43 @@
 lastfm-autocorrect
 ==================
 
-A transform stream (objectMode) that attempts to auto-correct and
-enhance track metadata using Last.fm's correction API, Levenstein
-distance and SoundEx.
+A transform stream in `objectMode` that attempts to auto-correct and enhance
+track metadata using Last.fm's correction API, Levenstein distance and SoundEx.
 
 It does the following things:
 
- - Tries to correct the track title, artist name and album name. If any
-   of these have been corrected the `autocorrected` property will be
-   `true` and the corresponding boolean properties `trackCorrected`,
-   `artistCorrected`, `albumCorrected` will be set.
- - If any of track title, artist name or album name have been corrected,
-   the original data will be stored in the `original` property.
- - Will try to find the MBIDs (MusicBrainz IDs) for track title, artist
-   name and album title and store them in `trackMBID`, `artistMBID`,
-   `albumMBID` accordingly.
- - Sets a `duration` property containing the track duration in
-   milliseconds. If Last.fm does not provide a duration, the average
-   duration of all tracks that have passed through the stream will be
-   used.
+ - Tries to correct the track title, artist name and album name. If any of
+   these have been corrected the `corrected` property will be `true` and the
+   corresponding boolean properties `trackCorrected`, `artistCorrected`,
+   `albumCorrected` will be set.
+
+ - If any of track title, artist name or album name have been corrected, the
+   original data will be stored in the `original` property.
+
+ - Will try to find the MBIDs (MusicBrainz IDs) for track title, artist name
+   and album title and store them in `trackMBID`, `artistMBID`, `albumMBID`
+   accordingly.
+
+ - Sets a `duration` property containing the track duration in milliseconds. If
+   Last.fm does not provide a duration, the average duration of all tracks that
+   have passed through the stream will be used. In that case
+   `durationEstimated` will be `true`.
 
 This module requires a [Last.fm API key](http://www.last.fm/api/account/create). 
 
-## API
+## Installation
 
-### `new LastfmAutocorrectStream(lastfmApiKey)`
+```sh
+npm install lastfm-autocorrect --save
+```
 
- - `lastfmApiKey`: Your Last.fm API key
+## Usage
+
+```js
+var autocorrectStream = require('lastfm-autocorrect');
+
+var autocorrect = autocorrectStream('MY_LASTFM_API_KEY_123456');
+```
 
 ### Input Format
 
@@ -35,22 +45,22 @@ The stream takes JavaScript objects in the following format:
 
 ```
 {
-    title: "The track title",
-    artist: "The artist name",
-    album: "The album title"
+  title: "The track title",
+  artist: "The artist name",
+  album: "The album title"
 }
 ```
 
 ## Example
 
-```javascript
-var LastfmAutocorrectStream = require('lastfm-autocorrect'),
+```js
+var autocorrectStream = require('lastfm-autocorrect'),
     SomaStationStream = require('somastation'),
     through = require('through');
 
-var LASTFM_API_KEY = 'YOUR_LASTFM_API_KEY';
+var LASTFM_API_KEY = 'MY_LASTFM_API_KEY_123456';
 var groovesalad = new SomaStationStream('groovesalad');
-var autocorrect = new LastfmAutocorrectStream(LASTFM_API_KEY);
+var autocorrect = autocorrectStream(LASTFM_API_KEY);
 
 groovesalad
     .pipe(through(function (track) {
@@ -69,21 +79,30 @@ Output:
 
 ```
 Original:
-{ artist: 'Global Communication', title: '9 25', album: '76 14' }
+{ time: 1425846938000,
+  artist: 'Walter Wanderly',
+  title: 'Cry Out Your Sadness',
+  album: 'Samba Swing' }
 
 Auto-corrected:
-{ artist: 'Global Communication',
-  title: '9 25',
-  album: '76.14',
-  trackCorrected: false,
-  artistCorrected: false,
-  trackMBID: null,
-  artistMBID: null,
-  albumCorrected: true,
-  albumMBID: null,
-  duration: '578000',
-  autocorrected: true,
-  original: { artist: 'Global Communication', title: '9 25', album: '76 14' } }
+{ time: 1425846938000,
+  artist: 'Walter Wanderley',
+  title: 'Cry Out Your Sadness',
+  album: 'Samba Swing',
+  trackCorrected: true,
+  artistCorrected: true,
+  albumCorrected: false,
+  corrected: true,
+  trackMBID: '013c274a-c368-4b33-89c0-6a90ca930c22',
+  artistMBID: '598aa4bc-992d-4f51-8c6b-e8c860f50493',
+  albumMBID: undefined,
+  duration: 0,
+  durationEstimated: false,
+  original: 
+   { time: 1425846938000,
+     artist: 'Walter Wanderly',
+     title: 'Cry Out Your Sadness',
+     album: 'Samba Swing' } }
 ```
 
 ## License

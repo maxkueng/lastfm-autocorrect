@@ -1,143 +1,123 @@
-var util = require('util'),
-	Transform = require('stream').Transform
-	LastfmAPI = require('lastfmapi'),
-	natural = require('natural'),
-	soundEx = natural.SoundEx,
-	avgDuration = null;
+var assign = require('object-assign');
+var through2 = require('through2');
+var LastfmAPI = require('lastfmapi');
+var natural = require('natural');
+var avgDuration = null;
 
-exports = module.exports = LastfmAutocorrectStream;
+exports = module.exports = function (apiKey) {
 
-function merge (a, b) {
-	var key;
-	if (a && b) {
-		for (key in b) {
-			a[key] = b[key];
-		}
-	}
-	return a;
-};
+	if (!apiKey) { throw new Error('Last.fm API key is required'); }
 
-function LastfmAutocorrectStream (apiKey) {
-	if (!(this instanceof LastfmAutocorrectStream)) { return new LastfmAutocorrectStream(apiKey); }
-	Transform.call(this, { objectMode: true });
+	var lfm = new LastfmAPI({ api_key: apiKey });
 
-	if (!apiKey) {
-		return process.nextTick(function () {
-			this.emit('error', new Error('Missing station API key'));
-		}.bind(this));
-	}
+	var stream = through2.obj(function (track, enc, next) {
 
-	this.apiKey = apiKey;
-	this.lfm = new LastfmAPI({ api_key: apiKey });
-}
+		var newTrack = assign({}, track);
 
-util.inherits(LastfmAutocorrectStream, Transform);
+		getCorrection(track, function (err, correction) {
+			assign(newTrack, correction);
 
-LastfmAutocorrectStream.prototype.getLastfmTrackExtraInfo = function (track, callback) {
-	function albumNeedsCorrection (original, suggestion) {
-		if (original === suggestion) { return null; }
+			getExtraInfo(track, function (err, info) {
+				assign(newTrack, info);
 
-		var lev = natural.LevenshteinDistance(suggestion, original),
-			sdx = soundEx.compare(suggestion, original);
+				if (newTrack.corrected) {
+					assign(newTrack, { original: track });
+				}
 
-		if (lev < 4 || sdx) {
-			return suggestion;
-		}
-
-		return null;
-	}
-
-	var params = (track.trackMBID) ? { mbid: track.trackMBID } : { track: track.title, artist: track.artist };
-
-	this.lfm.track.getInfo(params, function (err, info) {
-		if (err) { return callback(err); }
-		var trackInfo = {
-			albumCorrected: false,
-			albumMBID: null
-		};
-
-		if (info.duration) {
-			avgDuration = (!avgDuration) ? +info.duration : Math.floor((avgDuration + +info.duration) / 2);
-			trackInfo.duration = info.duration;
-			trackInfo.durationEstimated = false;
-		} else {
-			trackInfo.duration = avgDuration;
-			trackInfo.durationEstimated = true;
-		}
-
-		if (info.album && info.album.title) {
-			if (albumNeedsCorrection(track.album, info.album.title)) {
-				trackInfo.albumCorrected = true;
-				trackInfo.album = info.album.title;
-			}
-
-			if (track.album === info.album.title) {
-				trackInfo.albumMBID = info.album.mbid || null;
-			}
-		}
-
-		callback(null, trackInfo);
-	});
-};
-
-LastfmAutocorrectStream.prototype.getLastfmCorrection = function (track, callback) {
-	this.lfm.track.getCorrection(track.artist, track.title, function (err, corrections) {
-		if (err) { return callback(err); }
-
-		var trackInfo = {
-				trackCorrected: false,
-				artistCorrected: false,
-				trackMBID: null,
-				artistMBID: null
-			},
-			correction,
-			lfmTrack,
-			lfmArtist;
-
-		if (corrections.correction && corrections.correction.track) {
-			correction = corrections.correction;
-			lfmTrack = correction.track;
-			lfmArtist = lfmTrack.artist;
-
-			trackInfo.trackCorrected = (+correction['@attr'].trackcorrected === 1);
-			trackInfo.artistCorrected = (+correction['@attr'].artistcorrected === 1),
-			trackInfo.trackMBID = lfmTrack.mbid || null;
-			trackInfo.artistMBID = lfmArtist.mbid || null;
-
-			if (trackInfo.trackCorrected) { trackInfo.title = lfmTrack.name; }
-			if (trackInfo.artistCorrected) { trackInfo.artist = lfmArtist.name; }
-		}
-
-		callback(null, trackInfo);
-	});
-}
-
-LastfmAutocorrectStream.prototype._transform = function (data, enc, done) {
-	var self = this;
-
-	self.getLastfmCorrection(data, function (err, correction) {
-		var track = {};
-
-		track = merge(track, data);
-
-		if (!err && correction) {
-			track = merge(track, correction);
-		}
-
-		self.getLastfmTrackExtraInfo(track, function (err, extraInfo) {
-			if (!err && extraInfo) {
-				track = merge(track, extraInfo);
-			}
-
-			track.autocorrected = (track.trackCorrected || track.artistCorrected || track.albumCorrected);
-
-			if (track.autocorrected) {
-				track.original = data;
-			}
-
-			self.push(track);
-			done();
+				stream.push(newTrack);
+				next();
+			});
 		});
 
 	});
+
+	function albumNeedsCorrection (original, suggestion) {
+		if (original === suggestion) { return false; }
+
+		var lev = natural.LevenshteinDistance(suggestion, original);
+		var sdx = natural.SoundEx.compare(suggestion, original);
+
+		return (lev < 4 || sdx);
+	}
+
+	function getExtraInfo (track, callback) {
+		var params = track.trackMBID
+			? { mbid: track.trackMBID }
+			: { track: track.title, artist: track.artist };
+
+		lfm.track.getInfo(params, function (err, info) {
+			var trackInfo = {
+				albumCorrected: false,
+				albumMBID: track.albumMBID,
+				duration: avgDuration,
+				durationEstimated: true
+			};
+
+			if (err) { return callback(null, trackInfo); }
+
+			if (info.duration) {
+				info.duration = +info.duration;
+
+				avgDuration = (avgDuration === null)
+					? +info.duration
+					: Math.floor((avgDuration + info.duration) / 2);
+
+				trackInfo.duration = info.duration;
+				trackInfo.durationEstimated = false;
+			}
+
+			if (info.album && info.album.title) {
+				if (albumNeedsCorrection(track.album, info.album.title)) {
+					trackInfo.album = info.album.title;
+					trackInfo.albumCorrected = true;
+				}
+
+				if (track.album === info.album.title) {
+					trackInfo.albumMBID = info.album.mbid || trackInfo.albumMBID;
+				}
+
+				trackInfo.corrected = (trackInfo.corrected || trackInfo.albumCorrected);
+			}
+
+			callback(null, trackInfo);
+		});
+	}
+
+	function getCorrection (track, callback) {
+		lfm.track.getCorrection (track.artist, track.title, function (err, corrections) {
+			var trackInfo = {
+				trackCorrected: false,
+				artistCorrected: false,
+				albumCorrected: false,
+				corrected: false,
+				title: track.title,
+				artist: track.artist,
+				album: track.album,
+				trackMBID: track.trackMBID,
+				artistMBID: track.artistMBID,
+				albumMBID: track.albumMBID
+			};
+
+			if (!err && corrections.correction && corrections.correction.track) {
+				var correction = corrections.correction;
+				var lfmTrack = correction.track;
+				var lfmArtist = lfmTrack.artist;
+
+				trackInfo.trackCorrected = !!correction['@attr'].trackcorrected;
+				trackInfo.artistCorrected = !!correction['@attr'].trackcorrected;
+				trackInfo.trackMBID = lfmTrack.mbid || trackInfo.trackMBID;
+				trackInfo.artistMBID = lfmArtist.mbid || trackInfo.artistMBID;
+
+				if (trackInfo.trackCorrected) { trackInfo.title = lfmTrack.name; }
+				if (trackInfo.artistCorrected) { trackInfo.artist = lfmArtist.name; }
+
+				trackInfo.corrected = (trackInfo.trackCorrected || trackInfo.artistCorrected);
+			}
+
+			callback(null, trackInfo);
+		});
+	}
+
+	return stream;
+
 };
